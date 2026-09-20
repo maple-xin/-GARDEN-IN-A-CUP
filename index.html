@@ -24,7 +24,7 @@
 (() => {
   const W=720,H=1280,CUP={x:401,y:969,rx:112,ry:112},ROOT={x:401,y:936};
   let cnv,growth=0,bloom=0,wilt=0,holding=false,pointerId=null,mode='',px=401,py=969,startY=0,lastT=0;
-  let touched=false,audio=null,lastBloomChime=0,wiltSoundIndex=-1,grain=[];
+  let touched=false,audio=null,lastBloomChime=0,wiltSoundIndex=-1,growSoundIndex=-1,grain=[];
 
   function setup(){
     cnv=createCanvas(W,H);cnv.parent('stage');pixelDensity(Math.min(2,window.devicePixelRatio||1));
@@ -36,11 +36,16 @@
     // The photograph is an independent DOM layer so image decoding can never block p5 setup.
     clear();
     drawGrade();drawPlant();drawCupGlow();drawUI();
+    if(mode==='grow'&&growth<1){
+      const dt=min(40,deltaTime||16);growth=constrain(growth+dt/1450,0,1);const gi=floor(growth*5);
+      if(gi!==growSoundIndex){growSoundIndex=gi;playGrow(min(3,gi));}
+      if(growth>=1){growth=1;mode='';chime([329.63,440],.13);noLoop();}
+    }
     if(holding&&mode==='bloom'&&bloom<1){
       const dt=min(40,deltaTime||16);bloom=constrain(bloom+dt/2300,0,1);updateBloomAudio();
       if(bloom>=1){bloom=1;mode='readyWilt';chime([523.25,659.25,783.99],.2);noLoop();}
     }
-    if(holding&&mode==='bloom'&&bloom<1)loop();
+    if((mode==='grow'&&growth<1)||(holding&&mode==='bloom'&&bloom<1))loop();
   }
   function drawGrade(){
     noStroke();fill(15,9,5,18);rect(0,0,W,H);
@@ -52,22 +57,23 @@
   function drawPlant(){
     if(growth<=0)return;
     const stem=stage(0,.62),branch=stage(.28,.82),bud=stage(.68,1);
-    const topY=lerp(ROOT.y,475,stem),lean=sin(growth*PI)*11;
+    const topY=lerp(ROOT.y,430,stem),lean=sin(growth*PI)*11;
     // Soft shadow establishes the flower inside the real cup.
     noStroke();fill(18,12,7,65);ellipse(ROOT.x+10,ROOT.y+7,96,19);
     // Main stem follows a living bezier curve.
-    noFill();stroke(54,98,57);strokeWeight(10);bezier(ROOT.x,ROOT.y,ROOT.x-24,790,ROOT.x+26,620,ROOT.x+lean,topY);
-    stroke(102,148,82,180);strokeWeight(2.2);bezier(ROOT.x-2,ROOT.y-2,ROOT.x-22,790,ROOT.x+20,620,ROOT.x+lean-2,topY);
+    noFill();stroke(42,91,50);strokeWeight(15);bezier(ROOT.x,ROOT.y,ROOT.x-24,790,ROOT.x+26,620,ROOT.x+lean,topY);
+    stroke(122,168,92,190);strokeWeight(3);bezier(ROOT.x-3,ROOT.y-2,ROOT.x-22,790,ROOT.x+20,620,ROOT.x+lean-3,topY);
     if(branch>.02){
       drawLeaf(ROOT.x-5,lerp(900,760,branch),-1,branch,0);
       if(branch>.42)drawLeaf(ROOT.x+6,lerp(845,675,branch),1,map(branch,.42,1,0,1,true),1);
-      if(branch>.72)drawLeaf(ROOT.x-1,lerp(780,605,branch),-1,map(branch,.72,1,0,1,true),2);
+      if(branch>.68)drawLeaf(ROOT.x-1,lerp(780,605,branch),-1,map(branch,.68,1,0,1,true),2);
+      if(branch>.82)drawLeaf(ROOT.x+2,lerp(720,550,branch),1,map(branch,.82,1,0,1,true),3);
     }
     if(bud>.01)drawFlower(ROOT.x+lean,topY,bud,bloom,wilt);
   }
   function drawLeaf(x,y,side,p,k){
     p=ease(p);const brown=lerpColor(color('#497a45'),color('#80674d'),wilt*.78);push();translate(x,y);rotate(side*(.52+wilt*.36)+wilt*.25);scale(p*(1-wilt*.22));
-    fill(brown);stroke(40,81,44,210);strokeWeight(2);beginShape();vertex(0,0);bezierVertex(side*27,-49,side*82,-48,side*105,-5);bezierVertex(side*66,22,side*25,18,0,0);endShape(CLOSE);
+    fill(brown);stroke(32,75,39,220);strokeWeight(2.5);beginShape();vertex(0,0);bezierVertex(side*34,-61,side*105,-58,side*132,-6);bezierVertex(side*84,29,side*31,24,0,0);endShape(CLOSE);
     stroke(137,171,105,160);strokeWeight(1.6);line(0,0,side*85,-8);pop();
   }
   function flowerCenter(x,y,w){return{x:x+sin(w*PI)*14,y:y+w*118};}
@@ -89,6 +95,10 @@
     // The center becomes visible only as the player holds.
     noStroke();fill(lerpColor(color('#f5c75d'),color('#806b48'),w));circle(0,0,lerp(8,45,open));
     fill(92,67,35,170);for(let i=0;i<14;i++){let a=i*2.4;circle(cos(a)*open*15,sin(a)*open*15,2.4);}
+    if(b<.08){
+      fill('#e8a5ad');stroke(118,65,69,170);strokeWeight(2.2);ellipse(0,-25,58+bud*22,88+bud*28);
+      noStroke();fill(255,226,221,95);ellipse(-12,-42,14,42);
+    }
     pop();
   }
   function drawCupGlow(){
@@ -100,13 +110,13 @@
     fill(255,245,222,215);textFont('Arial');textSize(10);text(currentInstruction(),W/2,86);
     if(!touched){drawPulse(CUP.x,CUP.y,82);}
     else if(growth<1){drawTapMark(CUP.x,CUP.y-35);}
-    else if(bloom<1){const c=flowerCenter(ROOT.x+sin(growth*PI)*11,475,wilt);drawHoldMark(c.x,c.y);}
-    else if(wilt<1){const c=flowerCenter(ROOT.x,475,wilt);drawDragMark(c.x,c.y);}
+    else if(bloom<1){const c=flowerCenter(ROOT.x+sin(growth*PI)*11,430,wilt);drawHoldMark(c.x,c.y);}
+    else if(wilt<1){const c=flowerCenter(ROOT.x,430,wilt);drawDragMark(c.x,c.y);}
     else{fill(255,248,230,225);textFont('Georgia');textSize(17);textAlign(CENTER,BOTTOM);text('Nothing blooms forever.',W/2,1218);}
   }
   function currentInstruction(){
     if(growth===0)return'TAP THE CUP TO PLANT A MEMORY';
-    if(growth<1)return'TAP AGAIN · EACH TOUCH GROWS A NEW PART';
+    if(growth<1)return'LET THE STEM RISE';
     if(bloom<1)return'HOLD THE BUD TO LET IT BLOOM';
     if(wilt<1)return'DRAG THE FLOWER DOWN TO LET IT GO';
     return'TAP THE CUP TO GROW AGAIN';
@@ -122,12 +132,12 @@
       const p=local(ev);ev.preventDefault();px=p.x;py=p.y;lastT=performance.now();holding=true;pointerId=ev.pointerId;e.setPointerCapture?.(ev.pointerId);startAudio();
       if(inCup(p.x,p.y)){
         mode='cup';touched=true;
-        if(wilt>=.98){growth=.25;bloom=0;wilt=0;wiltSoundIndex=-1;playGrow(0);}
-        else if(growth<1){growth=min(1,growth+.25);playGrow(round(growth*4)-1);}
+        if(wilt>=.98){growth=0;bloom=0;wilt=0;wiltSoundIndex=-1;growSoundIndex=-1;}
+        if(growth<=.01){mode='grow';growSoundIndex=-1;loop();}
         redraw();return;
       }
       const head=getHead();
-      if(dist(p.x,p.y,head.x,head.y)<125&&growth>=.98){
+      if(dist(p.x,p.y,head.x,head.y)<155&&growth>=.98){
         if(bloom<1){mode='bloom';loop();}
         else{mode='wilt';startY=p.y;}
       }else mode='';
@@ -139,12 +149,12 @@
         wilt=constrain((p.y-startY)/360,0,1);const idx=floor(wilt*10);if(idx!==wiltSoundIndex){wiltSoundIndex=idx;playFall(idx);}redraw();
       }
     },{passive:false});
-    const release=ev=>{if(!holding||ev.pointerId!==pointerId)return;holding=false;pointerId=null;if(mode==='bloom')noLoop();mode='';settleAudio();redraw();};
+    const release=ev=>{if(!holding||ev.pointerId!==pointerId)return;holding=false;pointerId=null;if(mode==='bloom'){noLoop();mode='';}else if(mode!=='grow')mode='';settleAudio();redraw();};
     e.addEventListener('pointerup',release);e.addEventListener('pointercancel',release);e.addEventListener('lostpointercapture',release);
     window.addEventListener('blur',()=>{holding=false;noLoop();silenceAudio();redraw();});
   }
   function inCup(x,y){return sq((x-CUP.x)/CUP.rx)+sq((y-CUP.y)/CUP.ry)<1;}
-  function getHead(){return flowerCenter(ROOT.x+sin(growth*PI)*11,lerp(ROOT.y,475,stage(0,.62)),wilt);}
+  function getHead(){return flowerCenter(ROOT.x+sin(growth*PI)*11,lerp(ROOT.y,430,stage(0,.62)),wilt);}
   function local(ev){const r=cnv.elt.getBoundingClientRect();return{x:(ev.clientX-r.left)*W/r.width,y:(ev.clientY-r.top)*H/r.height};}
 
   function initAudio(){
